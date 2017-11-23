@@ -15,6 +15,10 @@ class DataGenerator(object):
             'dev': [],
             'test': []
         }
+        for i in data:
+            self.data_set[i['set']].append(i)
+        for k, v in self.data_set.items():
+            print(k, len(v))
 
     def generate_sample(self):
         """
