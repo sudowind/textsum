@@ -7,25 +7,25 @@ from matplotlib import pyplot as plt
 import gensim
 
 if __name__ == '__main__':
-    f_in = open('../data/data.json')
-    data = json.load(f_in)
-    f_in.close()
-    print(len(data))
-    # print(data[0])
-    data_set = {
-        'train': [],
-        'dev': [],
-        'test': []
-    }
-    for i in data:
-        data_set[i['set']].append(i)
-    for k, v in data_set.items():
-        print(k, len(v))
-
-    word_count = 0
-    for i in data:
-        word_count += len([x for x in filter(lambda x: x[0] != '<', i['data'].split(' '))])
-    print(word_count * 1.0 / len(data))
+    # f_in = open('../data/data.json')
+    # data = json.load(f_in)
+    # f_in.close()
+    # print(len(data))
+    # # print(data[0])
+    # data_set = {
+    #     'train': [],
+    #     'dev': [],
+    #     'test': []
+    # }
+    # for i in data:
+    #     data_set[i['set']].append(i)
+    # for k, v in data_set.items():
+    #     print(k, len(v))
+    #
+    # word_count = 0
+    # for i in data:
+    #     word_count += len([x for x in filter(lambda x: x[0] != '<', i['data'].split(' '))])
+    # print(word_count * 1.0 / len(data))
 
     # model = gensim.models.KeyedVectors.load_word2vec_format(Word2Vec, binary=True)
     #
@@ -34,7 +34,9 @@ if __name__ == '__main__':
     # print(model.word_vec('office'))
 
     generate = DataGenerator()
-    generate.calc_rouge()
+    # generate.calc_rouge()
+    # generate.gen_word_vec(True)
+    generate.gen_sample()
 
     # for i in data_set['dev'][:1]:
     #     doc = i['data']
@@ -43,12 +45,15 @@ if __name__ == '__main__':
     #     print(res)
     #     length = [len(_.split()) - 2 for _ in res]
     #     print(length)
-    #     generate.generate_sample(i)
+    #     generate.calc_item_rouge(i)
+    #     # print(i['rouge'])
     #     # plt.plot(length)
     #     # plt.show()
 
+    # generate.count_word()
+
     # summary = [[" Tokyo is the one of the biggest city in the world."]]
-    # reference = [[["The capital of Japan, Tokyo, is the center of Japanese economy.", " Tokyo is the one of the biggest city in the world."]]]
+    # reference = [[["The capital of Japan, Tokyo, is the center of Japanese economy."]]]
     #
     # # initialize setting of ROUGE to eval ROUGE-1, 2, SU4
     # # if you evaluate ROUGE by sentence list as above, set summary_file_exist=False
@@ -62,6 +67,4 @@ if __name__ == '__main__':
     #                     resampling=True, samples=1000, favor=True, p=0.5)
     # score = rouge.calc_score()
     # print(score)
-
-    # generate.count_word()
 
