@@ -174,11 +174,17 @@ class DataGenerator(object):
             para_mat = para_mat[:max_para_len]
             para_len = len(para_mat) if len(para_mat) > para_len else para_len
             para_len_list.append(len(para_mat))
-            for s in self.data_set[data_set][i]['rouge']:
+            for index, s in enumerate(self.data_set[data_set][i]['rouge']):
                 sen_mat = []
+                extra_feature = []
                 rouge = s[1]['ROUGE-1']
                 if data_set == 'test' and s[0] not in passage:
                     continue
+                if s[0] not in passage:
+                    pos = 0
+                else:
+                    pos = index
+                extra_feature.append(pos)
                 for w in re.split('[ -]', s[0]):
                     if w not in self.word2vec:
                         print(w)
@@ -190,9 +196,9 @@ class DataGenerator(object):
                 sen_len = len(sen_mat) if len(sen_mat) > sen_len else sen_len
                 sen_len_list.append(len(sen_mat))
                 if data_set == 'test':
-                    sample.append((np.array(para_mat), np.array(sen_mat), rouge, s[0], i))
+                    sample.append((np.array(para_mat), np.array(sen_mat), rouge, extra_feature, s[0], i))
                 else:
-                    sample.append((np.array(para_mat), np.array(sen_mat), rouge))
+                    sample.append((np.array(para_mat), np.array(sen_mat), rouge, extra_feature))
         # print(para_len)
         # print(sen_len)
         # print(len(sample))
@@ -200,41 +206,52 @@ class DataGenerator(object):
         # print(sen_len_list)
         if data_set == 'test':
             return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample]), \
-                   [i[3] for i in sample], [i[4] for i in sample]
+                   np.array([i[3] for i in sample]), [i[4] for i in sample], [i[5] for i in sample]
         else:
-            return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample])
+            return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample]), \
+                   np.array([i[3] for i in sample])
 
     def train_model(self):
         # sample = self.gen_sample('train')
-        X_para_valid, X_sen_valid, Y_valid = self.gen_sample('dev')
-        # X_para, X_sen, Y = self.gen_sample('dev')
-        # X_para, X_sen, Y = self.gen_sample('train')
-        X_para, X_sen, Y, _a, _b = self.gen_sample('test')
+        X_para_valid, X_sen_valid, Y_valid, extra_valid = self.gen_sample('dev')
+        # X_para, X_sen, Y, extra = self.gen_sample('dev')
+        # X_para, X_sen, Y, extra = self.gen_sample('train')
+        X_para, X_sen, Y, extra, _a, _b = self.gen_sample('test')
         para_input = Input(shape=(500, 300,))
         sen_input = Input(shape=(50, 300,))
+        extra_input = Input(shape=(1,))
         cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
         cnn1 = GlobalMaxPooling1D()(cnn1)
 
         cnn2 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(sen_input)
         cnn2 = GlobalMaxPooling1D()(cnn2)
 
-        all_input = concatenate([cnn1, cnn2])
+        all_input = concatenate([cnn1, cnn2, extra_input])
         # flat = Flatten()(cnn1)
         # drop = Dropout(0.2)(flat)
         middle = Dense(64, activation='relu')(all_input)
-        # middle = Dense(64, activation='relu')(middle)
-        main_output = Dense(1, activation='softmax')(middle)
-        model = Model(inputs=[para_input, sen_input], outputs=main_output)
-        model.compile(loss='mse', optimizer='sgd')
-        model.fit([X_para, X_sen], Y,
+        middle = Dense(64, activation='relu')(middle)
+        main_output = Dense(1, activation='sigmoid')(middle)
+        model = Model(inputs=[para_input, sen_input, extra_input], outputs=main_output)
+        model.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+        model.fit([X_para, X_sen, extra], Y,
                   batch_size=32,
-                  epochs=1,
-                  validation_data=([X_para_valid, X_sen_valid], Y_valid))
+                  epochs=5,
+                  validation_data=([X_para_valid, X_sen_valid, extra_valid], Y_valid))
         model.save('model.h5')
         self.model = model
 
     def test_model(self):
-        X_para_test, X_sen_test, Y_test, sentence, doc_id = self.gen_sample('test')
+        """
+        测试模型效果
+        baselines：
+            random
+            first-sentence
+        :return:
+        """
+        X_para_test, X_sen_test, Y_test, extra, sentence, doc_id = self.gen_sample('test')
         refs = []     # refs[i]是id为i的文本对应的参考摘要
         for i, item in enumerate(self.data_set['test']):
             tmp = []
@@ -247,7 +264,7 @@ class DataGenerator(object):
             model = self.model
         else:
             model = load_model('model.h5')
-        res = model.predict([X_para_test, X_sen_test],
+        res = model.predict([X_para_test, X_sen_test, extra],
                       batch_size=32)
         print(res)
         # print(len(doc_id))
@@ -256,12 +273,17 @@ class DataGenerator(object):
 
         id2sum = {i: {
             'max_rouge': 0,
-            'summary': ''
+            'summary': '',
+            'sentences': []
         } for i in doc_id}
         for rouge, did, sen in res:
             if rouge > id2sum[did]['max_rouge']:
+                id2sum[did]['max_rouge'] = rouge
                 id2sum[did]['summary'] = sen
+            id2sum[did]['sentences'].append(sen)
         scores = []
+        random_score = []
+        first_score = []
         for k, v in id2sum.items():
             ref = [[refs[k]]]
             summary = [[v['summary']]]
@@ -274,8 +296,37 @@ class DataGenerator(object):
                                 resampling=True, samples=1000, favor=True, p=0.5)
             score = rouge.calc_score()
             scores.append(score['ROUGE-1'])
+
+            # first sentences
+            summary = [[v['sentences'][0]]]
+            rouge = Pythonrouge(summary_file_exist=False,
+                                summary=summary, reference=ref,
+                                n_gram=2, ROUGE_SU4=True, ROUGE_L=False,
+                                recall_only=True, stemming=True, stopwords=True,
+                                word_level=True, length_limit=True, length=50,
+                                use_cf=False, cf=95, scoring_formula='average',
+                                resampling=True, samples=1000, favor=True, p=0.5)
+            score = rouge.calc_score()
+            first_score.append(score['ROUGE-1'])
+
+            # random sentences
+            summary = [[v['sentences'][random.randint(0, len(v['sentences']) - 1)]]]
+            rouge = Pythonrouge(summary_file_exist=False,
+                                summary=summary, reference=ref,
+                                n_gram=2, ROUGE_SU4=True, ROUGE_L=False,
+                                recall_only=True, stemming=True, stopwords=True,
+                                word_level=True, length_limit=True, length=50,
+                                use_cf=False, cf=95, scoring_formula='average',
+                                resampling=True, samples=1000, favor=True, p=0.5)
+            score = rouge.calc_score()
+            random_score.append(score['ROUGE-1'])
         print(scores)
         print(sum(scores) / len(scores))
+        print(first_score)
+        print(sum(first_score) / len(first_score))
+        print(random_score)
+        print(sum(random_score) / len(random_score))
+
 
 
 
