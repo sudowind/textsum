@@ -1,7 +1,7 @@
 import json
 
 from keras import Input, Model
-from keras.layers import MaxPool1D, Flatten, Dropout, Dense
+from keras.layers import MaxPool1D, Flatten, Dropout, Dense, GlobalMaxPooling1D, concatenate
 from pythonrouge.pythonrouge import Pythonrouge
 import re
 import gensim
@@ -159,7 +159,7 @@ class DataGenerator(object):
             pattern = '<s>([^<]*)</s>'
             sentences = ' '.join(re.findall(pattern, para))
             # s['dev']
-            print(sentences)
+            # print(sentences)
             para_mat = []
             for w in re.split('[ -]', sentences):
                 if w not in self.word2vec:
@@ -185,26 +185,34 @@ class DataGenerator(object):
                 sen_len = len(sen_mat) if len(sen_mat) > sen_len else sen_len
                 sen_len_list.append(len(sen_mat))
                 sample.append((np.array(para_mat), np.array(sen_mat), rouge))
-        print(para_len)
-        print(sen_len)
-        print(len(sample))
-        print(para_len_list)
-        print(sen_len_list)
-        X = [i[1] for i in sample]
-        Y = [i[2] for i in sample]
-        print(X[0].shape)
-        print(X[1].shape)
-        print(X[2].shape)
-        main_input = Input(shape=(10, 300,))
-        cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(main_input)
-        cnn1 = MaxPool1D(pool_size=4)(cnn1)
-        flat = Flatten()(cnn1)
-        drop = Dropout(0.2)(flat)
-        main_output = Dense(1, activation='relu')(drop)
-        model = Model(inputs=main_input, outputs=main_output)
+        # print(para_len)
+        # print(sen_len)
+        # print(len(sample))
+        # print(para_len_list)
+        # print(sen_len_list)
+        X_para = np.array([i[0] for i in sample])
+        X_sen = np.array([i[1] for i in sample])
+        Y = np.array([i[2] for i in sample])
+        # print(X[0].shape)
+        # print(X[1].shape)
+        # print(X[2].shape)
+        para_input = Input(shape=(1000, 300,))
+        sen_input = Input(shape=(50, 300,))
+        cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
+        cnn1 = GlobalMaxPooling1D()(cnn1)
+
+        cnn2 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(sen_input)
+        cnn2 = GlobalMaxPooling1D()(cnn2)
+
+        all_input = concatenate([cnn1, cnn2])
+        # flat = Flatten()(cnn1)
+        # drop = Dropout(0.2)(flat)
+        middle = Dense(64, activation='relu')(all_input)
+        main_output = Dense(1, activation='relu')(middle)
+        model = Model(inputs=[para_input, sen_input], outputs=main_output)
         model.compile(loss='mse', optimizer='sgd')
-        model.fit(X, Y,
+        model.fit([X_para, X_sen], Y,
                   batch_size=32,
                   epochs=15,
-                  validation_data=(X, Y))
+                  validation_data=([X_para, X_sen], Y))
 

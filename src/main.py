@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     generate = DataGenerator()
     # generate.calc_rouge()
-    # generate.gen_word_vec(True)
+    # generate.gen_word_vec()
     generate.gen_sample()
 
     # for i in data_set['dev'][:1]:
