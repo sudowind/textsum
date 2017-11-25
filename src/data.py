@@ -2,6 +2,7 @@ import json
 
 from keras import Input, Model
 from keras.layers import MaxPool1D, Flatten, Dropout, Dense, GlobalMaxPooling1D, concatenate
+from keras.models import load_model
 from pythonrouge.pythonrouge import Pythonrouge
 import re
 import gensim
@@ -31,6 +32,7 @@ class DataGenerator(object):
 
         f_in = open('../data/rouge_data.json')
         self.data_set = json.load(f_in)
+        self.model = None
 
         self.word2vec = json.load(open('word_vec.json'))
 
@@ -142,7 +144,7 @@ class DataGenerator(object):
             json.dump(word_dict, f_out)
         # print(words[0], len(vec), model.word_vec(words[0]))
 
-    def gen_sample(self):
+    def gen_sample(self, data_set='dev'):
         """
         生成训练样本
         :return:
@@ -154,7 +156,7 @@ class DataGenerator(object):
         sen_len = 0
         sen_len_list = []
         sample = []
-        for i in self.data_set['dev']:
+        for i in self.data_set[data_set]:
             para = i['data']
             pattern = '<s>([^<]*)</s>'
             sentences = ' '.join(re.findall(pattern, para))
@@ -190,12 +192,12 @@ class DataGenerator(object):
         # print(len(sample))
         # print(para_len_list)
         # print(sen_len_list)
-        X_para = np.array([i[0] for i in sample])
-        X_sen = np.array([i[1] for i in sample])
-        Y = np.array([i[2] for i in sample])
-        # print(X[0].shape)
-        # print(X[1].shape)
-        # print(X[2].shape)
+        return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample])
+
+    def train_model(self):
+        # sample = self.gen_sample('train')
+        X_para_valid, X_sen_valid, Y_valid = self.gen_sample('dev')
+        X_para, X_sen, Y = self.gen_sample('dev')
         para_input = Input(shape=(1000, 300,))
         sen_input = Input(shape=(50, 300,))
         cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
@@ -214,5 +216,17 @@ class DataGenerator(object):
         model.fit([X_para, X_sen], Y,
                   batch_size=32,
                   epochs=15,
-                  validation_data=([X_para, X_sen], Y))
+                  validation_data=([X_para_valid, X_sen_valid], Y_valid))
+        model.save('model.h5')
+        self.model = model
+
+    def test_model(self):
+        X_para_test, X_sen_test, Y_test = self.gen_sample('test')
+        if self.model:
+            model = self.model
+        else:
+            model = load_model('model.h5')
+        model.predict([X_para_test, X_sen_test],
+                      batch_size=32)
+
 
