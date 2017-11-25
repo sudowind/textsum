@@ -207,7 +207,9 @@ class DataGenerator(object):
     def train_model(self):
         # sample = self.gen_sample('train')
         X_para_valid, X_sen_valid, Y_valid = self.gen_sample('dev')
-        X_para, X_sen, Y = self.gen_sample('dev')
+        # X_para, X_sen, Y = self.gen_sample('dev')
+        # X_para, X_sen, Y = self.gen_sample('train')
+        X_para, X_sen, Y, _a, _b = self.gen_sample('test')
         para_input = Input(shape=(500, 300,))
         sen_input = Input(shape=(50, 300,))
         cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
@@ -220,13 +222,13 @@ class DataGenerator(object):
         # flat = Flatten()(cnn1)
         # drop = Dropout(0.2)(flat)
         middle = Dense(64, activation='relu')(all_input)
-        middle = Dense(64, activation='relu')(middle)
-        main_output = Dense(1, activation='relu')(middle)
+        # middle = Dense(64, activation='relu')(middle)
+        main_output = Dense(1, activation='softmax')(middle)
         model = Model(inputs=[para_input, sen_input], outputs=main_output)
         model.compile(loss='mse', optimizer='sgd')
         model.fit([X_para, X_sen], Y,
                   batch_size=32,
-                  epochs=5,
+                  epochs=1,
                   validation_data=([X_para_valid, X_sen_valid], Y_valid))
         model.save('model.h5')
         self.model = model
@@ -247,7 +249,11 @@ class DataGenerator(object):
             model = load_model('model.h5')
         res = model.predict([X_para_test, X_sen_test],
                       batch_size=32)
-        res = zip([res, doc_id, sentence])
+        print(res)
+        # print(len(doc_id))
+        # print(len(sentence))
+        res = zip([_[0] for _ in res], doc_id, sentence)
+
         id2sum = {i: {
             'max_rouge': 0,
             'summary': ''

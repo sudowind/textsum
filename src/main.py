@@ -36,7 +36,7 @@ if __name__ == '__main__':
     generate = DataGenerator()
     # generate.calc_rouge()
     # generate.gen_word_vec()
-    generate.train_model()
+    # generate.train_model()
     generate.test_model()
 
     # for i in data_set['dev'][:1]:
