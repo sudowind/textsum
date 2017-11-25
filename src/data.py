@@ -150,16 +150,17 @@ class DataGenerator(object):
         :return:
         """
         para_len = 0
-        max_para_len = 1000
+        max_para_len = 500
         max_sen_len = 50
         para_len_list = []
         sen_len = 0
         sen_len_list = []
         sample = []
-        for i in self.data_set[data_set]:
-            para = i['data']
+        for i in range(len(self.data_set[data_set])):
+            para = self.data_set[data_set][i]['data']
             pattern = '<s>([^<]*)</s>'
-            sentences = ' '.join(re.findall(pattern, para))
+            passage = re.findall(pattern, para)
+            sentences = ' '.join(passage)
             # s['dev']
             # print(sentences)
             para_mat = []
@@ -173,9 +174,11 @@ class DataGenerator(object):
             para_mat = para_mat[:max_para_len]
             para_len = len(para_mat) if len(para_mat) > para_len else para_len
             para_len_list.append(len(para_mat))
-            for s in i['rouge']:
+            for s in self.data_set[data_set][i]['rouge']:
                 sen_mat = []
                 rouge = s[1]['ROUGE-1']
+                if data_set == 'test' and s[0] not in passage:
+                    continue
                 for w in re.split('[ -]', s[0]):
                     if w not in self.word2vec:
                         print(w)
@@ -186,19 +189,26 @@ class DataGenerator(object):
                 sen_mat = sen_mat[:max_sen_len]
                 sen_len = len(sen_mat) if len(sen_mat) > sen_len else sen_len
                 sen_len_list.append(len(sen_mat))
-                sample.append((np.array(para_mat), np.array(sen_mat), rouge))
+                if data_set == 'test':
+                    sample.append((np.array(para_mat), np.array(sen_mat), rouge, s[0], i))
+                else:
+                    sample.append((np.array(para_mat), np.array(sen_mat), rouge))
         # print(para_len)
         # print(sen_len)
         # print(len(sample))
         # print(para_len_list)
         # print(sen_len_list)
-        return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample])
+        if data_set == 'test':
+            return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample]), \
+                   [i[3] for i in sample], [i[4] for i in sample]
+        else:
+            return np.array([i[0] for i in sample]), np.array([i[1] for i in sample]), np.array([i[2] for i in sample])
 
     def train_model(self):
         # sample = self.gen_sample('train')
         X_para_valid, X_sen_valid, Y_valid = self.gen_sample('dev')
         X_para, X_sen, Y = self.gen_sample('dev')
-        para_input = Input(shape=(1000, 300,))
+        para_input = Input(shape=(500, 300,))
         sen_input = Input(shape=(50, 300,))
         cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
         cnn1 = GlobalMaxPooling1D()(cnn1)
@@ -210,23 +220,56 @@ class DataGenerator(object):
         # flat = Flatten()(cnn1)
         # drop = Dropout(0.2)(flat)
         middle = Dense(64, activation='relu')(all_input)
+        middle = Dense(64, activation='relu')(middle)
         main_output = Dense(1, activation='relu')(middle)
         model = Model(inputs=[para_input, sen_input], outputs=main_output)
         model.compile(loss='mse', optimizer='sgd')
         model.fit([X_para, X_sen], Y,
                   batch_size=32,
-                  epochs=15,
+                  epochs=5,
                   validation_data=([X_para_valid, X_sen_valid], Y_valid))
         model.save('model.h5')
         self.model = model
 
     def test_model(self):
-        X_para_test, X_sen_test, Y_test = self.gen_sample('test')
+        X_para_test, X_sen_test, Y_test, sentence, doc_id = self.gen_sample('test')
+        refs = []     # refs[i]是id为i的文本对应的参考摘要
+        for i, item in enumerate(self.data_set['test']):
+            tmp = []
+            for j in item['label']:
+                pattern = '<s>([^<]*)</s>'
+                label = re.findall(pattern, j)[0]
+                tmp.append(label)
+            refs.append(tmp)
         if self.model:
             model = self.model
         else:
             model = load_model('model.h5')
-        model.predict([X_para_test, X_sen_test],
+        res = model.predict([X_para_test, X_sen_test],
                       batch_size=32)
+        res = zip([res, doc_id, sentence])
+        id2sum = {i: {
+            'max_rouge': 0,
+            'summary': ''
+        } for i in doc_id}
+        for rouge, did, sen in res:
+            if rouge > id2sum[did]['max_rouge']:
+                id2sum[did]['summary'] = sen
+        scores = []
+        for k, v in id2sum.items():
+            ref = [[refs[k]]]
+            summary = [[v['summary']]]
+            rouge = Pythonrouge(summary_file_exist=False,
+                                summary=summary, reference=ref,
+                                n_gram=2, ROUGE_SU4=True, ROUGE_L=False,
+                                recall_only=True, stemming=True, stopwords=True,
+                                word_level=True, length_limit=True, length=50,
+                                use_cf=False, cf=95, scoring_formula='average',
+                                resampling=True, samples=1000, favor=True, p=0.5)
+            score = rouge.calc_score()
+            scores.append(score['ROUGE-1'])
+        print(scores)
+        print(sum(scores) / len(scores))
+
 
 
