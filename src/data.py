@@ -334,12 +334,21 @@ class DataGenerator(object):
                                 resampling=True, samples=1000, favor=True, p=0.5)
             score = rouge.calc_score()
             random_score.append(score['ROUGE-1'])
-        print(scores)
-        print(sum(scores) / len(scores))
-        print(first_score)
-        print(sum(first_score) / len(first_score))
-        print(random_score)
-        print(sum(random_score) / len(random_score))
+        def get_res(all_score):
+            sum_score = {i: 0 for i in all_score[0].keys()}
+            sum_score['length'] = 0
+            for i in all_score:
+                for k, v in i.items():
+                    sum_score[k] += v
+                sum_score['length'] += 1
+            for i in sum_score.keys():
+                if i != 'length':
+                    sum_score[i] /= sum_score['length']
+            return sum_score
+
+        print(get_res(scores))
+        print(get_res(first_score))
+        print(get_res(random_score))
 
 
 
