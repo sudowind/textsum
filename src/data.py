@@ -185,11 +185,13 @@ class DataGenerator(object):
                 else:
                     pos = index
                 extra_feature.append(pos)
+                extra_feature.append(pos * pos)
                 for w in re.split('[ -]', s[0]):
                     if w not in self.word2vec:
                         print(w)
                     else:
                         sen_mat.append(self.word2vec[w])
+                extra_feature.append(len(sen_mat))
                 while len(sen_mat) < max_sen_len:
                     sen_mat.append([0] * 300)
                 sen_mat = sen_mat[:max_sen_len]
@@ -214,23 +216,35 @@ class DataGenerator(object):
     def train_model(self):
         # sample = self.gen_sample('train')
         X_para_valid, X_sen_valid, Y_valid, extra_valid = self.gen_sample('dev')
+        X_para_valid, X_sen_valid, Y_valid, extra_valid, _a, _b = self.gen_sample('test')
         # X_para, X_sen, Y, extra = self.gen_sample('dev')
-        # X_para, X_sen, Y, extra = self.gen_sample('train')
-        X_para, X_sen, Y, extra, _a, _b = self.gen_sample('test')
+        X_para, X_sen, Y, extra = self.gen_sample('train')
+        # X_para, X_sen, Y, extra, _a, _b = self.gen_sample('test')
         para_input = Input(shape=(500, 300,))
         sen_input = Input(shape=(50, 300,))
-        extra_input = Input(shape=(1,))
-        cnn1 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(para_input)
+        extra_input = Input(shape=(len(extra[0]),))
+        cnn1 = Conv1D(100, 3, padding='same', strides=1, activation='relu')(para_input)
+        # cnn2 = Conv1D(100, 4, padding='same', strides=1, activation='relu')(para_input)
+        # cnn3 = Conv1D(100, 5, padding='same', strides=1, activation='relu')(para_input)
         cnn1 = GlobalMaxPooling1D()(cnn1)
+        # cnn2 = GlobalMaxPooling1D()(cnn2)
+        # cnn3 = GlobalMaxPooling1D()(cnn3)
 
-        cnn2 = Conv1D(300, 3, padding='same', strides=1, activation='relu')(sen_input)
-        cnn2 = GlobalMaxPooling1D()(cnn2)
+        cnn4 = Conv1D(50, 3, padding='same', strides=1, activation='relu')(sen_input)
+        # cnn5 = Conv1D(50, 4, padding='same', strides=1, activation='relu')(sen_input)
+        # cnn6 = Conv1D(50, 5, padding='same', strides=1, activation='relu')(sen_input)
+        cnn4 = GlobalMaxPooling1D()(cnn4)
+        # cnn5 = GlobalMaxPooling1D()(cnn5)
+        # cnn6 = GlobalMaxPooling1D()(cnn6)
 
-        all_input = concatenate([cnn1, cnn2, extra_input])
+        # all_input = concatenate([cnn1, cnn2, cnn3, cnn4, cnn5, cnn6, extra_input])
+        all_input = concatenate([cnn1, cnn4, extra_input])
         # flat = Flatten()(cnn1)
         # drop = Dropout(0.2)(flat)
         middle = Dense(64, activation='relu')(all_input)
         middle = Dense(64, activation='relu')(middle)
+        middle = Dropout(0.2)(middle)
+        # middle = Dense(64, activation='relu')(middle)
         main_output = Dense(1, activation='sigmoid')(middle)
         model = Model(inputs=[para_input, sen_input, extra_input], outputs=main_output)
         model.compile(loss='binary_crossentropy',
